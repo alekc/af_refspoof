@@ -8,7 +8,7 @@ class af_refspoof extends Plugin {
 
     function about() {
         return array(
-            "1.0.1",
+            "1.0.2",
             "Fakes Referral on Images",
             "Alexander Chernov"
             );
@@ -100,15 +100,14 @@ EOF;
         $feedId = $article['feed_id'];
         $feeds  = $this->host->get($this, 'feeds');
 
-        if (in_array($feedId,array_keys($feeds))){
+        if (is_array($feeds) && in_array($feedId,array_keys($feeds))){
             $doc = new DOMDocument();
             @$doc->loadHTML($article['content']);
             if ($doc) {
                 $xpath = new DOMXPath($doc);
                 $entries = $xpath->query('(//img[@src])');
-                /** @var DOMElement **/
+                /** @var $entry DOMElement **/
                 $entry = null;
-                $matches = array();
                 foreach ($entries as $entry){
                     $origSrc = $entry->getAttribute("src");
                     $url = "/backend.php?op=pluginhandler&method=redirect&plugin=af_refspoof&url={$origSrc}&ref={$article['link']}";
@@ -164,4 +163,3 @@ EOF;
     }
 
 }
-?>
