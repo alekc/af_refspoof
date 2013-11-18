@@ -8,7 +8,7 @@ class af_refspoof extends Plugin {
 
     function about() {
         return array(
-            "1.0.2",
+            "1.0.3",
             "Fakes Referral on Images",
             "Alexander Chernov"
             );
@@ -34,7 +34,7 @@ class af_refspoof extends Plugin {
     */
     function hook_prefs_tab($args)
     {
-        if ($args != ""){
+        if ($args != "" && $args != "prefPrefs"){
             return;
         }
         $configFeeds = $this->host->get($this,"feeds");
