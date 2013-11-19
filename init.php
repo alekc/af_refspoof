@@ -8,7 +8,7 @@ class af_refspoof extends Plugin {
 
     function about() {
         return array(
-            "1.0.3",
+            "1.0.4",
             "Fakes Referral on Images",
             "Alexander Chernov"
             );
@@ -78,7 +78,7 @@ EOF;
                 print <<<EOF
                 <tr>
                     <td colspan="2">
-                        <input dojoType="dijit.form.CheckBox" type="checkbox" name="expandStubFeed[{$feed->id}]" id="expandStubFeed_{$feed->id}" value="1" {$checked}>{$feed->title}
+                        <input dojoType="dijit.form.CheckBox" type="checkbox" name="refSpoofFeed[{$feed->id}]" id="refSpoofFeed_{$feed->id}" value="1" {$checked}>{$feed->title}
                     </td>
                 </tr>
 EOF;
@@ -134,7 +134,7 @@ EOF;
     }
     function saveConfig()
     {
-        $config = (array) $_POST['expandStubFeed'];
+        $config = (array) $_POST['refSpoofFeed'];
         $this->host->set($this, 'feeds', $config);
         echo __("Configuration saved.");
     }
