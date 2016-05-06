@@ -110,7 +110,7 @@ EOF;
                 $entry = null;
                 foreach ($entries as $entry){
                     $origSrc = $entry->getAttribute("src");
-                    $url = "/backend.php?op=pluginhandler&method=redirect&plugin=af_refspoof&url={$origSrc}&ref={$article['link']}";
+                    $url = "backend.php?op=pluginhandler&method=redirect&plugin=af_refspoof&url={$origSrc}&ref={$article['link']}";
                     $entry->setAttribute("src",$url);
                 }
                 $article["content"] = $doc->saveXML();
