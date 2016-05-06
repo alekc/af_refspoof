@@ -108,9 +108,17 @@ EOF;
                 $entries = $xpath->query('(//img[@src])');
                 /** @var $entry DOMElement **/
                 $entry = null;
+                $backendURL = 'backend.php?op=pluginhandler&method=redirect&plugin=af_refspoof';
                 foreach ($entries as $entry){
                     $origSrc = $entry->getAttribute("src");
-                    $url = "backend.php?op=pluginhandler&method=redirect&plugin=af_refspoof&url={$origSrc}&ref={$article['link']}";
+                    if($origSrcSet = $entry->getAttribute("srcset")) {
+                        $srcSet = preg_replace(
+                            '#([^\s]+://[^\s]+)#',
+                            "{$backendURL}&url=$1&ref={$article['link']}",
+                            $origSrcSet);
+                        $entry->setAttribute("srcset", $srcSet);
+                    }
+                    $url = "{$backendURL}&url={$origSrc}&ref={$article['link']}";
                     $entry->setAttribute("src",$url);
                 }
                 $article["content"] = $doc->saveXML();
