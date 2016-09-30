@@ -19,7 +19,9 @@ class af_refspoof extends Plugin {
     * @param PluginHost $host
     */
     function init($host) {
-        require_once ("PhCURL.php");
+        if (!class_exists('PhCURL')) {
+            require_once ("PhCURL.php");
+        }
 
         $this->host = $host;
         $this->dbh = Db::get();
@@ -130,6 +132,7 @@ EOF;
     {
         $client = new PhCURL($_REQUEST["url"]);
         $client->loadCommonSettings();
+        $client->enableHeaderInOutput(false);
         $client->setReferer($_REQUEST["ref"]);
         $client->setUserAgent();
 
