@@ -6,24 +6,25 @@ class af_refspoof extends Plugin {
     /** @var Db **/
     protected $dbh;
 
-    function about() {
+    function about()
+    {
         return array(
-            "1.0.4",
+            "2.0.0",
             "Fakes Referral on Images",
             "Alexander Chernov"
             );
     }
+
     /**
     * Init
     *
     * @param PluginHost $host
     */
-    function init($host) {
-        require_once ("PhCURL.php");
-
+    function init($host)
+    {
         $this->host = $host;
-        $this->dbh = Db::get();
-        $host->add_hook($host::HOOK_RENDER_ARTICLE_CDM, $this);
+        $this->dbh = Db::pdo();
+        $host->add_hook($host::HOOK_ARTICLE_FILTER, $this);
         $host->add_hook($host::HOOK_PREFS_TAB, $this);
     }
 
@@ -54,14 +55,9 @@ EOF;
             <script type="dojo/method" event="onSubmit" args="evt">
                 evt.preventDefault();
                 if (this.validate()) {
-                    new Ajax.Request('backend.php', {
-                        parameters: dojo.objectToQuery(this.getValues()),
-                        onComplete: function(transport) {
-                            if (transport.responseText.indexOf('error')>=0)
-                                notify_error(transport.responseText);
-                            else notify_info(transport.responseText);
-                        }
-                    });
+                    xhr.post("backend.php", this.getValues(), (reply) => {
+                        Notify.info(reply);
+                    })
                 }
                 </script>
             <table>
@@ -95,60 +91,96 @@ EOF;
         print "</div>";
     }
 
-    function hook_render_article_cdm($article)
+    function make_redirect_url($url, $ref)
     {
-        $feedId = $article['feed_id'];
+        return $this->host->get_public_method_url($this, "spoof",
+            ["refspoof_url" => urlencode($url), "refspoof_ref" => urlencode($ref)]);
+    }
+
+    private function processArticle($article)
+    {
+        $need_saving = false;
+
+        $doc = new DOMDocument();
+        if (@$doc->loadHTML('<?xml encoding="UTF-8">' . $article["content"])) {
+            $xpath = new DOMXPath($doc);
+            $imgs = $xpath->query("//img[@src]");
+
+            foreach ($imgs as $img) {
+                $orig_src = $img->getAttribute("src");
+                $new_src = $this->make_redirect_url($orig_src, $article['link']);
+
+                if ($new_src != $orig_src) {
+                    $need_saving = true;
+
+                    $img->setAttribute("src", $new_src);
+                    $img->removeAttribute("srcset");
+                }
+            }
+        }
+
+        if ($need_saving)
+            $article["content"] = $doc->saveHTML();
+
+        return $article;
+    }
+
+    function hook_article_filter($article)
+    {
+        $feedID = $article['feed']['id'];
         $feeds  = $this->host->get($this, 'feeds');
 
-        if (is_array($feeds) && in_array($feedId,array_keys($feeds))){
-            $doc = new DOMDocument();
-            @$doc->loadHTML($article['content']);
-            if ($doc) {
-                $xpath = new DOMXPath($doc);
-                $entries = $xpath->query('(//img[@src])');
-                /** @var $entry DOMElement **/
-                $entry = null;
-                $backendURL = 'backend.php?op=pluginhandler&method=redirect&plugin=af_refspoof';
-                foreach ($entries as $entry){
-                    $origSrc = $entry->getAttribute("src");
-                    if ($origSrcSet = $entry->getAttribute("srcset")) {
-                        $srcSet = preg_replace_callback('#([^\s]+://[^\s]+)#', function ($m) use ($backendURL, $article) {
-                            return $backendURL . '&url=' . urlencode($m[0]) . '&ref=' . urlencode($article['link']);
-                        }, $origSrcSet);
-
-                        $entry->setAttribute("srcset", $srcSet);
-                    }
-                    $url = $backendURL . '&url=' . urlencode($origSrc) . '&ref=' . urlencode($article['link']);
-                    $entry->setAttribute("src",$url);
-                }
-                $article["content"] = $doc->saveXML();
-            }
+        if (is_array($feeds) && in_array($feedID,array_keys($feeds))){
+            $article = $this->processArticle($article);
         }
         return $article;
     }
-    function redirect()
-    {
-        $client = new PhCURL($_REQUEST["url"]);
-        $client->loadCommonSettings();
-        $client->setReferer($_REQUEST["ref"]);
-        $client->setUserAgent();
 
-        $client->GET();
-        ob_end_clean();
-        //header_remove("Content-Type: text/json; charset=utf-8");
-        header("Content-Type: ". $client->getContentType());
-        echo $client->getData();
-        exit(1);
+    function is_public_method($method)
+    {
+        return $method === "spoof";
     }
+
+    function spoof()
+    {
+        $url = urldecode($_REQUEST["refspoof_url"]);
+        $ref = urldecode($_REQUEST["refspoof_ref"]);
+
+        ob_end_clean(); // this appears to make echo work?
+
+        if(empty($url) || empty($ref)) {
+            http_response_code(400);
+            echo "need refspoof_url and refsppof_ref arguments";
+            return;
+        }
+        $ch = curl_init();
+        curl_setopt($ch, CURLOPT_URL, $url);
+        curl_setopt($ch, CURLOPT_RETURNTRANSFER, 1);
+        curl_setopt($ch, CURLOPT_REFERER, $ref);
+        $contentType = curl_getinfo($ch, CURLINFO_CONTENT_TYPE);
+        $result = curl_exec($ch);
+        curl_close($ch);
+
+        //$client->loadCommonSettings();
+        //$client->setUserAgent();
+
+        header("Content-Type: ". $contentType);
+        echo $result;
+        exit(0);
+    }
+
     function saveConfig()
     {
         $config = (array) $_POST['refSpoofFeed'];
         $this->host->set($this, 'feeds', $config);
         echo __("Configuration saved.");
     }
-    protected function translate($msg){
+
+    protected function translate($msg)
+    {
         return __($msg);
     }
+
     /**
     * Find feeds from db
     *
@@ -157,17 +189,20 @@ EOF;
     protected function getFeeds()
     {
         $feeds = array();
-        $result = $this->dbh->query("SELECT id, title
+        $stmt = $this->dbh->prepare("SELECT id, title
                 FROM ttrss_feeds
-                WHERE owner_uid = ".$_SESSION["uid"].
-                " ORDER BY order_id, title");
-        while ($line = $this->dbh->fetch_assoc($result)) {
+                WHERE owner_uid = :sessionID
+                ORDER BY order_id, title");
+        $stmt->execute(['sessionID' => $_SESSION["uid"]]);
+        $result = $stmt->fetch();
+        while ($line = $stmt->fetch(PDO::FETCH_ASSOC)) {
             $feeds[] = (object) $line;
         }
         return $feeds;
     }
-    function api_version() {
+
+    function api_version()
+    {
         return 2;
     }
-
 }
